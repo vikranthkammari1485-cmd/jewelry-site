@@ -64,7 +64,7 @@ function ProductCard({ product, isAdmin, onDelete }) {
         <h3 className="card-title">{product.name}</h3>
         <div className="card-footer">
           {product.price && <span className="card-price">{product.price}</span>}
-          
+          <a
             href={product.link}
             target="_blank"
             rel="noopener noreferrer"
