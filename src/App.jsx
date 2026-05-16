@@ -1,12 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import './App.css'
 
-// ─── SET YOUR PASSWORD HERE ───────────────────────────────────────────────────
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'Vicky@123'
-// ─────────────────────────────────────────────────────────────────────────────
 
 const CATEGORIES = ['All', 'Jewelry', 'Fashion', 'Gadgets', 'Gifts']
 const EMPTY_FORM  = { name: '', image: '', link: '', category: 'Jewelry', price: '' }
+const STORAGE_KEY = 'pinnedpicks_products'
 
 // ─── PLATFORM DETECTOR ───────────────────────────────────────────────────────
 function getPlatform(url) {
@@ -26,7 +25,7 @@ function getPlatform(url) {
   return { label: 'Shop Now',  color: '#C9956C', icon: '🛍️' }
 }
 
-// ─── PINTEREST LOGO (header only) ────────────────────────────────────────────
+// ─── PINTEREST LOGO ───────────────────────────────────────────────────────────
 const PINTEREST_SVG = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <path d="M12 0C5.373 0 0 5.373 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146C9.57 23.812 10.763 24 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z" />
@@ -65,7 +64,7 @@ function ProductCard({ product, isAdmin, onDelete }) {
         <h3 className="card-title">{product.name}</h3>
         <div className="card-footer">
           {product.price && <span className="card-price">{product.price}</span>}
-          <a
+          
             href={product.link}
             target="_blank"
             rel="noopener noreferrer"
@@ -177,7 +176,7 @@ function AddProductModal({ onAdd, onClose }) {
         </div>
         <div className="modal-body">
           {field('name', 'Product Name *', 'e.g. Gold Layered Necklace')}
-          {field('link', 'Product Link *', 'https://amazon.in/... or https://meesho.com/... etc')}
+          {field('link', 'Product Link *', 'https://amazon.in/... or https://meesho.com/...')}
           {field('image', 'Image URL', 'https://example.com/image.jpg')}
           {field('price', 'Price', '₹499')}
           <div className="field">
@@ -205,12 +204,30 @@ function AddProductModal({ onAdd, onClose }) {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 function App() {
-  const [products, setProducts]     = useState([])
+  // ── Load from localStorage on first render ──
+  const [products, setProducts] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+
   const [activeCategory, setActive] = useState('All')
   const [search, setSearch]         = useState('')
   const [isAdmin, setIsAdmin]       = useState(false)
   const [showLogin, setShowLogin]   = useState(false)
   const [showAdd, setShowAdd]       = useState(false)
+
+  // ── Save to localStorage whenever products change ──
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(products))
+    } catch {
+      console.error('Could not save products')
+    }
+  }, [products])
 
   const filtered = useMemo(() => {
     return products.filter(p => {
@@ -234,7 +251,6 @@ function App() {
             <span className="logo-text">Pinned<em>Picks</em></span>
           </div>
           <p className="header-tagline">Curated finds • Jewelry · Fashion · Gadgets · Gifts</p>
-
           <div className="admin-corner">
             {isAdmin ? (
               <button className="admin-pill admin-pill--active" onClick={handleLogout}>
@@ -272,7 +288,6 @@ function App() {
               >{cat}</button>
             ))}
           </div>
-
           {isAdmin && (
             <button className="btn-add" onClick={() => setShowAdd(true)}>
               + Add Product
