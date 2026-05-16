@@ -2,12 +2,31 @@ import { useState, useMemo } from 'react'
 import './App.css'
 
 // ─── SET YOUR PASSWORD HERE ───────────────────────────────────────────────────
-const ADMIN_PASSWORD = 'Vicky@123'
+const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'Vicky@123'
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CATEGORIES = ['All', 'Jewelry', 'Fashion', 'Gadgets', 'Gifts']
 const EMPTY_FORM  = { name: '', image: '', link: '', category: 'Jewelry', price: '' }
 
+// ─── PLATFORM DETECTOR ───────────────────────────────────────────────────────
+function getPlatform(url) {
+  if (!url) return { label: 'Shop Now', color: '#C9956C', icon: '🛍️' }
+  const u = url.toLowerCase()
+  if (u.includes('amazon'))    return { label: 'Amazon',    color: '#FF9900', icon: '📦' }
+  if (u.includes('flipkart'))  return { label: 'Flipkart',  color: '#2874F0', icon: '🛒' }
+  if (u.includes('meesho'))    return { label: 'Meesho',    color: '#9B2FAE', icon: '🛍️' }
+  if (u.includes('pinterest')) return { label: 'Pinterest', color: '#E60023', icon: '📌' }
+  if (u.includes('myntra'))    return { label: 'Myntra',    color: '#FF3F6C', icon: '👗' }
+  if (u.includes('ajio'))      return { label: 'Ajio',      color: '#E8173F', icon: '✨' }
+  if (u.includes('nykaa'))     return { label: 'Nykaa',     color: '#FC2779', icon: '💄' }
+  if (u.includes('etsy'))      return { label: 'Etsy',      color: '#F56400', icon: '🎨' }
+  if (u.includes('snapdeal'))  return { label: 'Snapdeal',  color: '#E40046', icon: '🔖' }
+  if (u.includes('instagram')) return { label: 'Instagram', color: '#C13584', icon: '📷' }
+  if (u.includes('shein'))     return { label: 'Shein',     color: '#000000', icon: '👘' }
+  return { label: 'Shop Now',  color: '#C9956C', icon: '🛍️' }
+}
+
+// ─── PINTEREST LOGO (header only) ────────────────────────────────────────────
 const PINTEREST_SVG = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <path d="M12 0C5.373 0 0 5.373 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146C9.57 23.812 10.763 24 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z" />
@@ -17,6 +36,7 @@ const PINTEREST_SVG = (
 // ─── PRODUCT CARD ─────────────────────────────────────────────────────────────
 function ProductCard({ product, isAdmin, onDelete }) {
   const [imgError, setImgError] = useState(false)
+  const platform = getPlatform(product.link)
 
   return (
     <article className="card">
@@ -50,10 +70,11 @@ function ProductCard({ product, isAdmin, onDelete }) {
             target="_blank"
             rel="noopener noreferrer"
             className="card-btn"
-            aria-label={`Shop ${product.name}`}
+            style={{ background: platform.color }}
+            aria-label={`Buy ${product.name} on ${platform.label}`}
           >
-            {PINTEREST_SVG}
-            Shop Now
+            <span>{platform.icon}</span>
+            {platform.label}
           </a>
         </div>
       </div>
@@ -156,9 +177,9 @@ function AddProductModal({ onAdd, onClose }) {
         </div>
         <div className="modal-body">
           {field('name', 'Product Name *', 'e.g. Gold Layered Necklace')}
-          {field('link', 'Product / Pinterest Link *', 'https://amazon.com/... or https://pinterest.com/pin/...')}
+          {field('link', 'Product Link *', 'https://amazon.in/... or https://meesho.com/... etc')}
           {field('image', 'Image URL', 'https://example.com/image.jpg')}
-          {field('price', 'Price', '$24.99')}
+          {field('price', 'Price', '₹499')}
           <div className="field">
             <label className="field-label" htmlFor="category">Category</label>
             <select
@@ -214,7 +235,6 @@ function App() {
           </div>
           <p className="header-tagline">Curated finds • Jewelry · Fashion · Gadgets · Gifts</p>
 
-          {/* Admin toggle — small, unobtrusive */}
           <div className="admin-corner">
             {isAdmin ? (
               <button className="admin-pill admin-pill--active" onClick={handleLogout}>
@@ -253,7 +273,6 @@ function App() {
             ))}
           </div>
 
-          {/* Add Product — only visible when logged in as admin */}
           {isAdmin && (
             <button className="btn-add" onClick={() => setShowAdd(true)}>
               + Add Product
