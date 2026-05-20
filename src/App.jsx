@@ -1,11 +1,14 @@
 import { useState, useMemo, useEffect } from 'react'
 import './App.css'
+import { db } from './firebase'
+import {
+  collection, addDoc, deleteDoc,
+  doc, onSnapshot, query, orderBy
+} from 'firebase/firestore'
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'Vicky@123'
-
 const CATEGORIES = ['All', 'Jewelry', 'Fashion', 'Gadgets', 'Gifts']
 const EMPTY_FORM  = { name: '', image: '', link: '', category: 'Jewelry', price: '' }
-const STORAGE_KEY = 'pinnedpicks_products'
 
 // ─── PLATFORM DETECTOR ───────────────────────────────────────────────────────
 function getPlatform(url) {
@@ -21,7 +24,7 @@ function getPlatform(url) {
   if (u.includes('etsy'))      return { label: 'Etsy',      color: '#F56400', icon: '🎨' }
   if (u.includes('snapdeal'))  return { label: 'Snapdeal',  color: '#E40046', icon: '🔖' }
   if (u.includes('instagram')) return { label: 'Instagram', color: '#C13584', icon: '📷' }
-  if (u.includes('shein'))     return { label: 'Shein',     color: '#000000', icon: '👘' }
+  if (u.includes('shein'))     return { label: 'Shein',     color: '#222222', icon: '👘' }
   return { label: 'Shop Now',  color: '#C9956C', icon: '🛍️' }
 }
 
@@ -93,11 +96,11 @@ function LoginModal({ onSuccess, onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Admin login">
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">🔒 Admin Login</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
+          <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
           <div className="field">
@@ -113,11 +116,9 @@ function LoginModal({ onSuccess, onClose }) {
                 onKeyDown={e => e.key === 'Enter' && handleLogin()}
                 autoFocus
               />
-              <button
-                className="pw-toggle"
-                onClick={() => setShow(s => !s)}
-                aria-label={show ? 'Hide password' : 'Show password'}
-              >{show ? '🙈' : '👁️'}</button>
+              <button className="pw-toggle" onClick={() => setShow(s => !s)}>
+                {show ? '🙈' : '👁️'}
+              </button>
             </div>
             {error && <span className="field-error">{error}</span>}
           </div>
@@ -133,8 +134,9 @@ function LoginModal({ onSuccess, onClose }) {
 
 // ─── ADD PRODUCT MODAL ────────────────────────────────────────────────────────
 function AddProductModal({ onAdd, onClose }) {
-  const [form, setForm]     = useState(EMPTY_FORM)
-  const [errors, setErrors] = useState({})
+  const [form, setForm]       = useState(EMPTY_FORM)
+  const [errors, setErrors]   = useState({})
+  const [loading, setLoading] = useState(false)
 
   const validate = () => {
     const e = {}
@@ -145,10 +147,12 @@ function AddProductModal({ onAdd, onClose }) {
     return e
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = validate()
     if (Object.keys(e).length) { setErrors(e); return }
-    onAdd({ ...form, id: Date.now(), name: form.name.trim(), price: form.price.trim() })
+    setLoading(true)
+    await onAdd({ ...form, name: form.name.trim(), price: form.price.trim() })
+    setLoading(false)
     onClose()
   }
 
@@ -168,11 +172,11 @@ function AddProductModal({ onAdd, onClose }) {
   )
 
   return (
-    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Add product">
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">Add New Product</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
+          <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
           {field('name', 'Product Name *', 'e.g. Gold Layered Necklace')}
@@ -195,7 +199,9 @@ function AddProductModal({ onAdd, onClose }) {
         </div>
         <div className="modal-footer">
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={handleSubmit}>Add Product</button>
+          <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
+            {loading ? 'Saving…' : 'Add Product'}
+          </button>
         </div>
       </div>
     </div>
@@ -204,30 +210,23 @@ function AddProductModal({ onAdd, onClose }) {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 function App() {
-  // ── Load from localStorage on first render ──
-  const [products, setProducts] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      return saved ? JSON.parse(saved) : []
-    } catch {
-      return []
-    }
-  })
-
+  const [products, setProducts]     = useState([])
+  const [loading, setLoading]       = useState(true)
   const [activeCategory, setActive] = useState('All')
   const [search, setSearch]         = useState('')
   const [isAdmin, setIsAdmin]       = useState(false)
   const [showLogin, setShowLogin]   = useState(false)
   const [showAdd, setShowAdd]       = useState(false)
 
-  // ── Save to localStorage whenever products change ──
+  // ── Real-time listener from Firestore ──────────────────────────────────────
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(products))
-    } catch {
-      console.error('Could not save products')
-    }
-  }, [products])
+    const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'))
+    const unsub = onSnapshot(q, snapshot => {
+      setProducts(snapshot.docs.map(d => ({ id: d.id, ...d.data() })))
+      setLoading(false)
+    }, () => setLoading(false))
+    return () => unsub()
+  }, [])
 
   const filtered = useMemo(() => {
     return products.filter(p => {
@@ -237,9 +236,18 @@ function App() {
     })
   }, [products, activeCategory, search])
 
-  const handleAdd    = (p)  => setProducts(prev => [p, ...prev])
-  const handleDelete = (id) => setProducts(prev => prev.filter(p => p.id !== id))
-  const handleLogout = ()   => setIsAdmin(false)
+  // ── Add to Firestore ───────────────────────────────────────────────────────
+  const handleAdd = async (product) => {
+    await addDoc(collection(db, 'products'), {
+      ...product,
+      createdAt: Date.now()
+    })
+  }
+
+  // ── Delete from Firestore ──────────────────────────────────────────────────
+  const handleDelete = async (id) => {
+    await deleteDoc(doc(db, 'products', id))
+  }
 
   return (
     <>
@@ -253,7 +261,7 @@ function App() {
           <p className="header-tagline">Curated finds • Jewelry · Fashion · Gadgets · Gifts</p>
           <div className="admin-corner">
             {isAdmin ? (
-              <button className="admin-pill admin-pill--active" onClick={handleLogout}>
+              <button className="admin-pill admin-pill--active" onClick={() => setIsAdmin(false)}>
                 🔓 Admin &nbsp;·&nbsp; Logout
               </button>
             ) : (
@@ -269,7 +277,7 @@ function App() {
       <div className="controls">
         <div className="controls-inner">
           <div className="search-wrap">
-            <span className="search-icon" aria-hidden="true">🔍</span>
+            <span className="search-icon">🔍</span>
             <input
               type="search"
               className="search-input"
@@ -279,7 +287,7 @@ function App() {
               aria-label="Search products"
             />
           </div>
-          <div className="filters" role="group" aria-label="Filter by category">
+          <div className="filters" role="group">
             {CATEGORIES.map(cat => (
               <button
                 key={cat}
@@ -298,7 +306,9 @@ function App() {
 
       {/* GRID */}
       <main className="main">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="empty"><p>⏳ Loading products…</p></div>
+        ) : filtered.length === 0 ? (
           <div className="empty">
             <p>{products.length === 0 ? '✨ Products coming soon — check back!' : 'No products match your search.'}</p>
           </div>
@@ -320,7 +330,6 @@ function App() {
         <p>Made with ♥ for your Pinterest shop · {new Date().getFullYear()}</p>
       </footer>
 
-      {/* MODALS */}
       {showLogin && (
         <LoginModal
           onSuccess={() => setIsAdmin(true)}
